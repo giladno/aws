@@ -1,0 +1,51 @@
+{
+  "name": "aws-terraform-module",
+  "version": "1.0.0",
+  "description": "A production-ready, secure Terraform module for AWS infrastructure with VPC, ECS Fargate, RDS, Lambda, and comprehensive security controls",
+  "homepage": "https://github.com/giladno/aws",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giladno/aws.git"
+  },
+  "bugs": {
+    "url": "https://github.com/giladno/aws/issues"
+  },
+  "scripts": {
+    "tf:init": "terraform init",
+    "tf:plan": "terraform plan -var-file=terraform.tfvars",
+    "tf:apply": "terraform apply -var-file=terraform.tfvars",
+    "tf:destroy": "terraform destroy -var-file=terraform.tfvars",
+    "tf:validate": "terraform validate",
+    "tf:fmt": "terraform fmt -recursive",
+    "tf:fmt:check": "terraform fmt -check -recursive",
+    "tf:security": "tfsec . || echo 'tfsec not installed'",
+    "tf:docs": "terraform-docs markdown table --output-file README.md --output-mode inject .",
+    "tf:clean": "rm -rf .terraform .terraform.lock.hcl",
+    "tf:upgrade": "terraform init -upgrade",
+    "precommit": "npm run tf:fmt && npm run tf:validate",
+    "dev:plan": "terraform plan -var-file=terraform.tfvars -var environment=development",
+    "dev:apply": "terraform apply -var-file=terraform.tfvars -var environment=development",
+    "prod:plan": "terraform plan -var-file=terraform.tfvars -var environment=production",
+    "prod:apply": "terraform apply -var-file=terraform.tfvars -var environment=production"
+  },
+  "keywords": [
+    "aws",
+    "terraform",
+    "infrastructure",
+    "vpc",
+    "ecs",
+    "fargate",
+    "rds",
+    "aurora",
+    "lambda",
+    "cloudfront",
+    "alb",
+    "security",
+    "production-ready"
+  ],
+  "author": "Gilad Novik <gilad@novik.ca>",
+  "license": "MIT",
+  "engines": {
+    "terraform": ">=1.0"
+  }
+}

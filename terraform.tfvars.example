@@ -1,0 +1,734 @@
+# Example terraform.tfvars file
+# Copy this to terraform.tfvars and customize for your project
+
+# Required Variables
+name       = "my-app"     # Your project name - used as prefix for all resources (lowercase, alphanumeric, hyphens only, max 32 chars)
+aws_region = "us-west-2"  # AWS region to deploy resources
+
+# Optional: Override environment (defaults to "production")
+environment = "production"  # lowercase, alphanumeric, hyphens only, max 16 chars
+
+# Optional: Add custom tags to all resources
+tags = {
+  Team  = "platform"
+  Owner = "ops-team"
+  Cost  = "shared"
+}
+
+# Optional: DNS Configuration (requires existing domain in Route53)
+dns = {
+  domain = "example.com"  # Set your domain name to enable Route53 and ACM SSL
+}
+
+# Optional: VPC Configuration (uses production defaults if not specified)
+vpc = {
+  # Uncomment to customize CIDR block
+  # cidr_block = "10.0.0.0/16"
+
+  # Uncomment to specify availability zones (defaults to first 3 AZs)
+  # availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
+
+  # NAT Gateway configuration for cost optimization
+  nat_gateway = {
+    single_nat_gateway = false  # Set to true for cost savings (not HA)
+    # one_nat_gateway_per_az = true  # Default: one NAT per AZ for HA
+  }
+
+  # VPC Endpoints (interface endpoints cost money)
+  endpoints = {
+    # Gateway endpoints (free)
+    s3 = { enabled = true }  # Auto-enabled when S3 is enabled
+
+    # Interface endpoints (paid - auto-enabled based on service usage)
+    ecr_api = { enabled = true }        # Auto-enabled when Fargate services exist
+    ecr_dkr = { enabled = true }        # Auto-enabled when Fargate services exist
+    logs = { enabled = true }           # Auto-enabled when Fargate or RDS exist
+    secretsmanager = { enabled = true } # Auto-enabled when Fargate, RDS, or bastion exist
+
+    # KMS endpoint (auto-enabled when RDS or S3 use encryption)
+    # kms = { enabled = true }  # Auto-enabled when RDS or S3 are enabled
+
+    # Additional custom endpoints - add any other VPC endpoints you need
+    # endpoints = {
+    #   dynamodb = {
+    #     service_name      = "com.amazonaws.us-west-2.dynamodb"
+    #     vpc_endpoint_type = "Gateway"
+    #   }
+    #   ssm = {
+    #     service_name      = "com.amazonaws.us-west-2.ssm"
+    #     vpc_endpoint_type = "Interface"
+    #   }
+    # }
+  }
+
+  # Optional: Enable VPC Flow Logs
+  # flow_logs = {
+  #   enabled = true
+  #   traffic_type = "ALL"  # "ALL", "ACCEPT", or "REJECT"
+  # }
+
+  # Optional: Enable bastion host
+  bastion = {
+    enabled       = true
+    username      = "bastion"   # Username for SSH access
+    instance_type = "t3.nano"   # Instance type (t3.nano is cost-effective for bastion)
+  }
+}
+
+# Optional: S3 Configuration
+s3 = {
+  enabled = true  # Set to false to disable S3 bucket creation
+  # bucket_name = "custom-bucket-name"  # Defaults to ${name}-s3-bucket
+  versioning = false  # Enable versioning for the bucket
+  
+  # Static file serving configuration
+  public = "/public"         # Path prefix for static files served via CloudFront (set to null to disable CloudFront)
+  spa = "index.html"         # SPA redirect target for 404/403 errors: string path or true (uses default_root_object)
+  default_root_object = "index.html"  # Default file served at root path
+  
+  lifecycle_rules = {
+    transition_to_ia_days = 30        # Days to transition to IA
+    transition_to_glacier_days = 90   # Days to transition to Glacier
+    # expiration_days = 365           # Days to delete objects (optional)
+    
+    # Additional custom lifecycle rules (optional)
+    rules = [
+      # Example: Archive logs after 1 year, delete after 7 years
+      {
+        id = "archive_logs"
+        filter = {
+          prefix = "logs/"
+        }
+        transitions = [
+          {
+            days = 30                      # Minimum 30 days required for STANDARD_IA
+            storage_class = "STANDARD_IA"  
+          },
+          {
+            days = 365
+            storage_class = "GLACIER"
+          }
+        ]
+        expiration = {
+          days = 2555  # 7 years
+        }
+      }
+      
+      # Example: Clean up temp files after 7 days  
+      # {
+      #   id = "cleanup_temp"
+      #   filter = {
+      #     prefix = "temp/"
+      #   }
+      #   expiration = {
+      #     days = 7
+      #   }
+      # }
+    ]
+  }
+}
+
+# Optional: RDS Configuration
+rds = {
+  enabled = true  # Set to false to disable RDS creation
+
+  # Database type - choose between Aurora and standard PostgreSQL
+  engine_type = "aurora-postgresql"  # "aurora-postgresql" or "postgres"
+  engine_version = "15.8"
+
+  # Database settings (db_name defaults to project name if not specified)
+  # db_name  = "custom_db_name"  # Optional - defaults to project name with underscores
+  username = "postgres"
+
+  # Aurora-specific configuration (used when engine_type = "aurora-postgresql")
+  aurora_config = {
+    instance_count          = 1               # Number of Aurora instances
+    instance_class          = "db.r6g.large" # Instance class for non-serverless Aurora
+    serverless_enabled      = true           # Use Serverless v2 scaling
+    serverless_min_capacity = 0.5            # Minimum ACUs
+    serverless_max_capacity = 1              # Maximum ACUs
+  }
+
+  # Standard PostgreSQL configuration (used when engine_type = "postgres")
+  postgres_config = {
+    instance_class        = "db.t3.micro"  # Instance size
+    allocated_storage     = 20             # Storage in GB
+    max_allocated_storage = 100            # Auto-scaling limit
+    storage_type         = "gp3"           # Storage type
+    storage_encrypted    = true            # Encrypt storage
+    multi_az             = false           # Multi-AZ deployment (for HA)
+  }
+
+  # Common configuration
+  backup_retention_period = 7     # Days
+  backup_window          = "03:00-04:00"
+  maintenance_window     = "Sun:04:00-Sun:05:00"
+
+  # Performance and logging
+  performance_insights_enabled = false  # Disable to save costs
+  log_retention_days          = 7       # CloudWatch log retention
+  monitoring_interval         = 0       # Enhanced monitoring (0 = disabled)
+
+  # Security
+  deletion_protection = false  # Enable for production
+  skip_final_snapshot = true   # Skip final snapshot on destroy
+
+  # Optional: Enable RDS Proxy (works with both Aurora and standard PostgreSQL)
+  proxy = false
+  
+  # Optional: Custom database parameters (for extensions, performance tuning, etc.)
+  parameter_groups = {
+    # Aurora cluster-level parameters (only for Aurora)
+    aurora_parameters = {
+      # "log_min_duration_statement" = "5000"
+      # "log_lock_waits" = "1"
+    }
+    
+    # Instance-level parameters (both Aurora instances and standard PostgreSQL)
+    instance_parameters = {
+      # Enable extensions (Aurora supports: pg_stat_statements, pgaudit, pg_cron, pglogical, etc.)
+      # "shared_preload_libraries" = "pg_stat_statements,pgaudit"
+      # Note: pgmq and some extensions are NOT supported in Aurora - use standard PostgreSQL instead
+      # "pgaudit.log" = "all"
+      
+      # Performance tuning
+      # "random_page_cost" = "1.1"
+      # "effective_io_concurrency" = "200"
+    }
+  }
+}
+
+# Optional: ECS Services Configuration
+services = {
+  nginx = {
+    # Service control
+    enabled = true  # Enable/disable this service (default: true)
+    
+    # Container configuration
+    image          = "nginx:alpine"
+    container_port = 3000
+
+    # Resource allocation
+    task_cpu    = 256   # CPU units
+    task_memory = 512   # MB
+
+    # Scaling configuration
+    desired_count  = 1
+    min_capacity   = 1
+    max_capacity   = 3
+
+    # Load balancer configuration
+    health_check_path = "/"
+    path_pattern     = "/nginx/*"  # Path-based routing: accessible at domain.com/nginx/*
+    # subdomain        = "nginx"    # Host-based routing: accessible at nginx.domain.com (alternative to path_pattern)
+    priority         = 100
+    
+    # CORS configuration (for API services that need it)
+    cors = {
+      enabled           = true                                    # Enable CORS headers in application responses
+      allow_credentials = false                                  # Allow credentials
+      allow_headers     = ["Content-Type", "Authorization"]     # Allowed headers
+      allow_methods     = ["GET", "POST", "PUT", "DELETE"]      # Allowed methods
+      allow_origins     = ["https://myapp.com", "https://admin.myapp.com"]  # Specific origins
+      expose_headers    = ["X-Total-Count"]                     # Headers exposed to browser
+      max_age           = 3600                                   # Preflight cache time (1 hour)
+    }
+
+    # Logging
+    log_retention_days = 7
+    
+    # Monitoring (true by default - creates CloudWatch alarms when monitoring is enabled globally)
+    monitoring = true
+
+    # Environment configuration
+    environment = {
+      # AWS region - true = "AWS_REGION", string = custom env var name (enabled by default)
+      region = true  # Will create AWS_REGION environment variable
+      
+      # Node.js environment - true = "NODE_ENV", string = custom env var name (disabled by default)
+      node = false   # Set to true to create NODE_ENV environment variable
+      
+      # S3 access - true = "S3_BUCKET", string = custom env var name
+      s3 = true  # Will create S3_BUCKET environment variable
+
+      # Database access - true = "DATABASE_URL", string = custom env var name
+      database = true  # Will create DATABASE_URL environment variable
+
+      # Custom environment variables
+      variables = {
+        NGINX_WORKER_PROCESSES = "auto"
+        NGINX_WORKER_CONNECTIONS = "1024"
+      }
+    }
+    
+    # Secrets from AWS Secrets Manager (key = env var name, value = secret name)
+    secrets = {
+      API_SECRET = "nginx-api-secret"
+    }
+    
+    # IAM permissions (optional - uses shared role with S3 access by default)
+    permissions = {
+      s3  = true   # S3 bucket access (enabled by default)
+      ses = true   # SES email sending permissions
+      statements = []
+    }
+  }
+
+  # Add more services as needed:
+  # api = {
+  #   image = "your-registry/your-app-api:latest"
+  #   container_port = 3000
+  #   
+  #   # Choose either path-based or subdomain routing:
+  #   path_pattern = "/api/*"      # Path-based: accessible at domain.com/api/*
+  #   # subdomain = "api"          # Subdomain: accessible at api.domain.com
+  #   
+  #   priority = 200  # Higher number = lower priority (nginx has 100)
+  #   environment = {
+  #     region = true        # Adds AWS_REGION (enabled by default)
+  #     node = true          # Adds NODE_ENV (disabled by default)
+  #     database = true      # Adds DATABASE_URL
+  #     s3 = "BUCKET_NAME"   # Adds custom env var name
+  #     variables = {
+  #       API_KEY = "your-api-key"
+  #     }
+  #   }
+  # }
+  #
+  # # Example with subdomain routing:
+  # admin = {
+  #   image = "your-registry/admin-panel:latest"
+  #   container_port = 3000
+  #   subdomain = "admin"    # Accessible at admin.domain.com
+  #   priority = 300
+  #   environment = {
+  #     region = true
+  #     database = true
+  #     variables = {
+  #       ADMIN_SECRET = "your-admin-secret"
+  #     }
+  #   }
+  # }
+}
+
+# Optional: Monitoring Configuration
+monitoring = {
+  enabled = true  # Enable/disable all monitoring resources
+  
+  # SNS email notifications (optional) - can be string or array of strings
+  sns_notifications = {
+    critical_alerts_email = ["ops-team@company.com", "oncall@company.com"]  # Emails for critical alerts
+    warning_alerts_email  = "monitoring@company.com"                        # Email for warning alerts
+  }
+  
+  # CloudWatch Dashboard
+  dashboard = {
+    enabled = true  # Create CloudWatch dashboard with key metrics
+  }
+  
+  # Alarm thresholds (all optional with sensible defaults)
+  alarms = {
+    # RDS/Aurora alarm thresholds
+    aurora_cpu_threshold         = 80   # CPU utilization threshold (%)
+    aurora_connections_threshold = 200  # Database connections threshold
+    
+    # ALB alarm thresholds
+    alb_response_time_threshold = 2   # Response time threshold (seconds)
+    alb_5xx_error_threshold    = 10  # 5xx error count threshold
+    
+    # CloudFront alarm thresholds
+    cloudfront_5xx_threshold = 5  # 5xx error rate threshold (%)
+    
+    # ECS Service alarm thresholds (applied to services with monitoring = true)
+    ecs_cpu_threshold    = 80  # CPU utilization threshold (%)
+    ecs_memory_threshold = 80  # Memory utilization threshold (%)
+    
+    # Service health and availability thresholds
+    ecs_service_min_running_tasks = 1  # Minimum running tasks before crash alarm
+    alb_healthy_host_threshold    = 1  # Minimum healthy targets before alarm
+    alb_unhealthy_host_threshold  = 0  # Maximum unhealthy targets before alarm
+    
+    # Lambda function alarm thresholds (applied to functions with monitoring = true)
+    lambda_error_threshold    = 5     # Error count threshold per 5 minutes
+    lambda_duration_threshold = 10000 # Duration threshold in milliseconds (10 seconds)
+    lambda_throttle_threshold = 5     # Throttle count threshold per 5 minutes
+    
+    # Evaluation periods and timing
+    aurora_cpu_evaluation_periods = 2    # Number of periods before alarm
+    ecs_cpu_evaluation_periods   = 2    # Number of periods before alarm
+    ecs_alarm_period             = 300  # Period in seconds (5 minutes)
+  }
+  
+  # Log retention settings
+  log_retention = {
+    default_retention_days = 14  # Default log retention for services
+  }
+  
+  # Log monitoring for error detection
+  log_monitoring = {
+    enabled = true  # Enable log-based error detection
+    error_threshold = 10  # Error count threshold per 5 minutes
+    error_evaluation_periods = 2  # Number of periods before alarm
+    
+    # Patterns to detect in logs (case-sensitive)
+    error_patterns = [
+      "ERROR",
+      "FATAL", 
+      "Exception",
+      "error:",
+      "failed",
+      "timeout",
+      "500",
+      "502",
+      "503"
+    ]
+  }
+}
+
+# Optional: SES (Simple Email Service) Configuration
+ses = {
+  enabled = true  # Enable SES domain setup (requires DNS domain to be configured)
+  
+  # Domain verification settings
+  domain_verification = {
+    create_verification_record = true  # Create Route53 TXT record for domain verification
+    create_dkim_records       = true  # Create DKIM CNAME records for email authentication
+  }
+  
+  # Email sending configuration
+  sending_config = {
+    reputation_tracking_enabled = true  # Track sending reputation
+    delivery_options           = "TLS" # Use TLS for secure delivery
+  }
+  
+  # Configuration set for advanced tracking (optional)
+  configuration_set = {
+    enabled                 = false  # Enable configuration set for tracking
+    reputation_tracking    = true   # Track bounce/complaint reputation
+    delivery_delay_tracking = false # Track delivery delays
+    open_tracking          = false # Track email opens (requires HTML emails)
+    click_tracking         = false # Track link clicks
+  }
+  
+  # Bounce and complaint notifications (optional)
+  # bounce_notifications = {
+  #   bounce_topic    = "arn:aws:sns:us-west-2:123456789012:ses-bounces"    # SNS topic for bounces
+  #   complaint_topic = "arn:aws:sns:us-west-2:123456789012:ses-complaints" # SNS topic for complaints
+  #   delivery_topic  = "arn:aws:sns:us-west-2:123456789012:ses-deliveries" # SNS topic for deliveries
+  # }
+  
+  # Verified email addresses for development/testing (optional)
+  verified_emails = [
+    "noreply@example.com",
+    "support@example.com"
+  ]
+  
+  # Additional tags
+  tags = {
+    Service = "email"
+    Environment = "production"
+  }
+}
+
+# Optional: Lambda Functions Configuration
+lambda = {
+  # Example: Scheduled data processing function
+  data_processor = {
+    # Function control
+    enabled = true  # Enable/disable this function (default: true)
+    
+    source_dir = "./lambda/data_processor"  # Local directory containing function code
+    runtime    = "nodejs22.x"
+    handler    = "main.handler"
+    timeout    = 60
+    memory_size = 512
+    
+    # Performance and deployment configuration
+    layers = [
+      # Existing layer ARN
+      {
+        arn = "arn:aws:lambda:us-west-2:123456789012:layer:aws-sdk-v3:1"
+      },
+      # Create new layer from zip file
+      {
+        zip_file            = "./layers/shared-utils.zip"
+        name                = "shared-utils"
+        description         = "Shared utility functions"
+        compatible_runtimes = ["nodejs22.x", "nodejs20.x", "nodejs18.x"]
+        license_info        = "MIT"
+        max_versions        = 3  # Keep only 3 latest versions of this layer
+      }
+    ]
+    provisioned_concurrency = 5          # Provisioned concurrency (null/0 = disabled, >0 = enabled with count)
+    reserved_concurrency = 10         # Maximum concurrent executions
+    
+    # Version management for deployments
+    version_management = {
+      publish_versions     = true      # Always publish new versions
+      max_versions_to_keep = 5         # Keep only 5 latest versions (automatic pruning)
+    }
+    
+    # Dead letter queue for failed executions
+    # dead_letter_config = {
+    #   target_arn = "arn:aws:sqs:us-west-2:123456789012:dead-letter-queue"
+    # }
+    
+    environment = {
+      # region is ignored for Lambda (AWS_REGION provided automatically)
+      node = true          # NODE_ENV=production (auto-enabled for Node.js runtimes)
+      # node = "development" # NODE_ENV=development (custom value)
+      s3 = true           # S3_BUCKET environment variable 
+      database = true     # DATABASE_URL from secrets
+      variables = {
+        LOG_LEVEL = "INFO"
+        BATCH_SIZE = "100"
+      }
+    }
+    
+    secrets = {
+      API_KEY = "my-app-api-key"  # Reads from AWS Secrets Manager secret named "my-app-api-key"
+    }
+    
+    # IAM permissions (optional - uses shared role with S3 access by default)
+    permissions = {
+      s3  = true   # S3 bucket access (enabled by default)
+      ses = true   # SES email sending permissions
+      statements = []
+    }
+    
+    # VPC configuration (optional - uses private subnets)
+    # vpc_config = {
+    #   subnet_ids         = []  # Uses private subnets by default
+    #   security_group_ids = []  # Custom security groups if needed
+    # }
+    
+    triggers = {
+      # CloudWatch Events scheduled trigger
+      schedule = {
+        enabled             = true
+        schedule_expression = "rate(1 hour)"                    # Every hour
+        description         = "Process data hourly"
+        input               = jsonencode({environment = "prod"}) # Optional JSON input
+      }
+    }
+    
+    monitoring = true  # Enable CloudWatch alarms
+  }
+  
+  # Example: SQS-triggered function with queue creation
+  queue_processor = {
+    source_dir = "./lambda/queue_processor"
+    runtime    = "nodejs22.x" 
+    handler    = "main.handler"
+    timeout    = 30
+    memory_size = 256
+    
+    environment = {
+      region = true
+      node = true  # NODE_ENV environment variable
+      variables = {
+        PROCESSING_MODE = "batch"
+      }
+    }
+    
+    secrets = {}  # No additional secrets needed
+    
+    # IAM permissions (optional - gets automatic SQS permissions when using SQS trigger)
+    # permissions = {
+    #   s3 = false  # Disable S3 access for this function
+    #   statements = [
+    #     {
+    #       effect = "Allow"
+    #       actions = ["dynamodb:PutItem", "dynamodb:GetItem"]
+    #       resources = ["arn:aws:dynamodb:*:*:table/MyTable"]
+    #     }
+    #   ]
+    # }
+    
+    triggers = {
+      # SQS trigger (creates queue automatically)
+      sqs = {
+        enabled                 = true
+        queue_name              = "my-custom-queue-name"  # Optional: custom queue name
+        batch_size              = 5   # Process 5 messages at a time
+        maximum_batching_window = 10  # Wait up to 10 seconds for batch
+        
+        queue_config = {
+          visibility_timeout_seconds = 180  # 3 minutes (6x function timeout)
+          message_retention_seconds  = 345600  # 4 days
+          max_receive_count         = 3     # Send to DLQ after 3 failures
+          delay_seconds             = 0     # No delivery delay
+          receive_wait_time_seconds = 20    # Long polling enabled
+          enable_dlq                = true  # Create dead letter queue
+        }
+      }
+    }
+    
+    monitoring = true
+  }
+  
+  # Example: S3-triggered function
+  image_processor = {
+    source_dir = "./lambda/image_processor"
+    runtime    = "nodejs22.x"
+    handler    = "main.handler"
+    timeout    = 300  # 5 minutes for image processing
+    memory_size = 1024
+    
+    environment = {
+      region = true
+      s3 = true  # S3_BUCKET environment variable
+      variables = {
+        MAX_IMAGE_SIZE = "10485760"  # 10MB
+        OUTPUT_FORMAT  = "webp"
+      }
+    }
+    
+    secrets = {}
+    
+    triggers = {
+      # S3 trigger (always uses main S3 bucket)
+      s3 = {
+        enabled       = true
+        events        = ["s3:ObjectCreated:*"]
+        filter_prefix = "uploads/images/"   # Only process images in uploads/images/
+        filter_suffix = ".jpg"             # Only process .jpg files
+      }
+    }
+    
+    monitoring = true
+  }
+  
+  # Example: HTTP API function with subdomain
+  webhook_handler = {
+    source_dir = "./lambda/webhook"
+    runtime    = "nodejs22.x"
+    handler    = "main.handler"
+    timeout    = 30
+    memory_size = 128
+    
+    environment = {
+      region = true
+      variables = {}
+    }
+    
+    secrets = {
+      WEBHOOK_SECRET = "my-app-webhook-secret"  # Reads from Secrets Manager
+    }
+    
+    triggers = {
+      # HTTP trigger with subdomain (supports multiple methods)
+      http = {
+        enabled           = true
+        methods           = ["POST", "PUT"]     # Multiple HTTP methods supported
+        subdomain         = "webhook"           # Accessible at webhook.domain.com
+        cors = {
+          # Full CORS object configuration
+          allow_credentials = false             # Allow credentials
+          allow_headers     = ["content-type", "x-webhook-signature"]
+          allow_methods     = ["POST", "PUT"]   # Specific methods
+          allow_origins     = ["https://github.com", "https://gitlab.com"]
+          expose_headers    = ["x-rate-limit"]
+          max_age           = 86400             # 24 hours
+        }
+        # Alternative CORS configurations:
+        # cors = true         # Enable with default settings
+        # cors = null         # Disable CORS (default)
+        authorization        = "NONE"
+        disable_http         = true                # HTTPS only (default: true)
+        catch_all_enabled    = true                # Catch all paths under subdomain (default: true)
+        alb                  = false               # Use ALB instead of API Gateway (enables HTTP->HTTPS redirect)
+      }
+    }
+    
+    monitoring = true
+  }
+  
+  # Example: HTTP API function with path pattern
+  api_handler = {
+    source_dir = "./lambda/api"
+    runtime    = "nodejs22.x"
+    handler    = "main.handler"
+    timeout    = 15
+    memory_size = 256
+    
+    environment = {
+      region = true
+      node = true  # NODE_ENV environment variable
+      variables = {}
+    }
+    
+    secrets = {}
+    
+    triggers = {
+      # HTTP trigger with path pattern (uses ALB, supports multiple methods)
+      http = {
+        enabled              = true
+        methods              = ["GET", "POST", "PUT"]  # Multiple HTTP methods
+        path_pattern         = "/api/lambda"           # Base path - catch_all adds /* automatically
+        cors = {
+          enabled       = true                        # Enable CORS
+          allow_origins = ["https://myapp.com"]      # Specific origin
+          allow_methods = ["GET", "POST", "PUT"]     # Allowed methods
+          allow_headers = ["content-type", "authorization"]
+        }
+        authorization        = "NONE"
+        disable_http         = true                    # HTTPS only (default: true)
+        catch_all_enabled    = true                    # Catch all paths under /api/lambda/* (default: true)
+        alb                  = false                   # ALB automatically used when path_pattern is set
+      }
+    }
+    
+    monitoring = true
+  }
+  
+  # Example: Task orchestrator function with Fargate and SES permissions
+  task_orchestrator = {
+    source_dir = "./lambda/task_orchestrator"
+    runtime    = "nodejs22.x"
+    handler    = "main.handler"
+    timeout    = 60
+    memory_size = 512
+    
+    environment = {
+      region = true
+      node = true
+      variables = {
+        CLUSTER_NAME = "my-app-cluster"
+        TASK_FAMILY = "my-app-nginx"
+      }
+    }
+    
+    secrets = {
+      EMAIL_FROM = "email-from-address"  # SES verified email address
+    }
+    
+    permissions = {
+      s3      = false  # Disable S3 access for this function
+      fargate = true   # Enable ECS Fargate task execution (ecs:RunTask)
+      ses     = true   # Enable SES email sending permissions
+      statements = []
+    }
+    
+    triggers = {
+      # HTTP trigger for manual task execution
+      http = {
+        enabled              = true
+        methods              = ["POST"]
+        path_pattern         = "/api/tasks"           # Base path - catch_all adds /* automatically
+        cors = {
+          enabled       = true                        # Enable CORS
+          allow_origins = ["https://admin.myapp.com"] # Admin panel origin
+          allow_methods = ["POST"]
+          allow_headers = ["content-type", "x-api-key"]
+        }
+        authorization        = "NONE"
+        disable_http         = true                   # HTTPS only (default: true)
+        catch_all_enabled    = true                   # Catch all paths under /api/tasks/* (default: true)
+        alb                  = true                   # Use ALB for superior HTTP->HTTPS redirect (creates ALB even with no services)
+      }
+    }
+    
+    monitoring = true
+  }
+}
