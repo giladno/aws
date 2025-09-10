@@ -158,7 +158,7 @@ data "external" "service_digest_tag" {
     if config.source != null
   }
 
-  program = ["sh", "-c", "if [ -f /tmp/terraform-${each.key}-digest-tag ]; then cat /tmp/terraform-${each.key}-digest-tag | jq -R '{digest_tag: .}'; else echo 'Error: Docker build not completed for ${each.key}' >&2; exit 1; fi"]
+  program = ["sh", "-c", "if [ -f /tmp/terraform-${each.key}-digest-tag ]; then echo \"{\\\"digest_tag\\\": \\\"$(cat /tmp/terraform-${each.key}-digest-tag)\\\"}\"; else echo 'Error: Docker build not completed for ${each.key}' >&2; exit 1; fi"]
 
   depends_on = [null_resource.docker_build]
 }
