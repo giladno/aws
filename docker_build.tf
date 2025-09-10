@@ -74,7 +74,7 @@ resource "null_resource" "docker_build" {
       
       # Generate consistent tag from source hash (matches the logic in locals)
       SOURCE_HASH="${data.archive_file.service_source[each.key].output_base64sha256}"
-      IMAGE_TAG=$(echo "$SOURCE_HASH" | cut -c1-12)
+      IMAGE_TAG=$(echo "$SOURCE_HASH" | cut -c1-12 | tr -d '/' | tr '+' '-')
       
       echo "Using image tag: $IMAGE_TAG (from source hash)"
       
@@ -148,7 +148,7 @@ locals {
   service_images = {
     for name, config in local.services_unified_enabled : name =>
     config.source != null ?
-    "${aws_ecr_repository.main[0].repository_url}:${substr(data.archive_file.service_source[name].output_base64sha256, 0, 12)}" :
+    "${aws_ecr_repository.main[0].repository_url}:${replace(replace(substr(data.archive_file.service_source[name].output_base64sha256, 0, 12), "/", ""), "+", "-")}" :
     config.image
   }
 }
