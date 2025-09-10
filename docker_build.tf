@@ -72,6 +72,12 @@ resource "null_resource" "docker_build" {
       BUILD_CONTEXT="$SOURCE_DIR/$CONTEXT"
       DOCKERFILE_PATH="$SOURCE_DIR/$DOCKERFILE"
       
+      # Generate consistent tag from source hash (matches the logic in locals)
+      SOURCE_HASH="${data.archive_file.service_source[each.key].output_base64sha256}"
+      IMAGE_TAG=$(echo "$SOURCE_HASH" | cut -c1-12)
+      
+      echo "Using image tag: $IMAGE_TAG (from source hash)"
+      
       # Build command
       DOCKER_BUILD_CMD="docker build"
       DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD -f $DOCKERFILE_PATH"
@@ -81,33 +87,18 @@ resource "null_resource" "docker_build" {
         DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD --target $TARGET"
       fi
       
-      DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD -t $ECR_REPOSITORY:$SERVICE_NAME-temp"
+      DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD -t $ECR_REPOSITORY:$IMAGE_TAG"
       DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD $BUILD_CONTEXT"
       
       echo "Executing: $DOCKER_BUILD_CMD"
       eval $DOCKER_BUILD_CMD
       
-      # Get the image ID and create digest-based tag
-      IMAGE_ID=$(docker inspect --format='{{.Id}}' $ECR_REPOSITORY:$SERVICE_NAME-temp | cut -d':' -f2 | cut -c1-12)
-      DIGEST_TAG="$SERVICE_NAME-$IMAGE_ID"
-      
-      # Tag with digest-based tag
-      echo "Creating digest-based tag: $DIGEST_TAG"
-      docker tag $ECR_REPOSITORY:$SERVICE_NAME-temp $ECR_REPOSITORY:$DIGEST_TAG
-      
-      # Push the digest-based image
+      # Push the image
       echo "Pushing Docker image to ECR..."
-      docker push $ECR_REPOSITORY:$DIGEST_TAG
-      
-      # Clean up temporary tag
-      echo "Cleaning up temporary tag..."
-      docker rmi $ECR_REPOSITORY:$SERVICE_NAME-temp || true
-      
-      # Write the digest tag to a file for Terraform to read
-      echo "$DIGEST_TAG" > "/tmp/terraform-$SERVICE_NAME-digest-tag"
+      docker push $ECR_REPOSITORY:$IMAGE_TAG
       
       echo "Successfully built and pushed Docker image for service: $SERVICE_NAME"
-      echo "Digest tag: $DIGEST_TAG"
+      echo "Image tag: $IMAGE_TAG"
     EOT
   }
 
@@ -151,25 +142,13 @@ data "archive_file" "service_source" {
 
 # Note: No longer using "latest" tag - services use digest-based tags only
 
-# Data source to read the digest tag from the build process
-data "external" "service_digest_tag" {
-  for_each = {
-    for name, config in local.services_unified_enabled : name => config
-    if config.source != null
-  }
-
-  program = ["sh", "-c", "if [ -f /tmp/terraform-${each.key}-digest-tag ]; then echo \"{\\\"digest_tag\\\": \\\"$(cat /tmp/terraform-${each.key}-digest-tag)\\\"}\"; else echo 'Error: Docker build not completed for ${each.key}' >&2; exit 1; fi"]
-
-  depends_on = [null_resource.docker_build]
-}
-
 # Local values for service images
 locals {
   # Create a map of service images (either from ECR builds or provided images)
   service_images = {
     for name, config in local.services_unified_enabled : name =>
     config.source != null ?
-    "${aws_ecr_repository.main[0].repository_url}:${data.external.service_digest_tag[name].result.digest_tag}" :
+    "${aws_ecr_repository.main[0].repository_url}:${substr(data.archive_file.service_source[name].output_base64sha256, 0, 12)}" :
     config.image
   }
 }
