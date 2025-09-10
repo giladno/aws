@@ -223,6 +223,10 @@ resource "aws_ecs_service" "service_auto_deploy" {
   }
 
   tags = var.config.common_tags
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 # ECS Service with manual deployment (when force_new_deployment = false)
@@ -272,6 +276,6 @@ resource "aws_ecs_service" "service_manual_deploy" {
   tags = var.config.common_tags
 
   lifecycle {
-    ignore_changes = [task_definition]
+    ignore_changes = [task_definition, desired_count]
   }
 }
