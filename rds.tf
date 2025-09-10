@@ -3,7 +3,6 @@
 # Only create RDS resources if enabled
 locals {
   # create_rds and is_aurora now defined in locals.tf
-  is_postgres = var.rds.engine_type == "postgres"
   db_name     = local.computed_db_name # Use centrally computed database name
 
   # Extract password from AWS-managed secret JSON (only for password-based auth)
