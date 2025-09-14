@@ -314,8 +314,8 @@ resource "aws_lambda_function" "main" {
   # Lambda layers (use combined ARNs from created and existing layers)
   layers = local.all_layer_arns
 
-  # Reserved concurrency (not configured in this module)
-  # reserved_concurrent_executions = -1
+  # Reserved concurrency (only set if explicitly configured)
+  reserved_concurrent_executions = local.effective_reserved_concurrency != null ? local.effective_reserved_concurrency : -1
 
   # Don't publish versions by default
   publish = false

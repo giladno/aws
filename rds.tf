@@ -319,6 +319,31 @@ resource "aws_security_group_rule" "ecs_from_lambda_ingress" {
   description              = "ECS service port ${each.value.port} from Lambda"
 }
 
+# Security group rules for bastion access to ECS services with custom ingress (like Lambda access)
+# When a service has custom ingress rules (e.g., Lambda on port 4000), bastion should also have access
+resource "aws_security_group_rule" "bastion_to_ecs_custom_ingress" {
+  for_each = local.bastion_enabled && length(local.lambda_to_ecs_rules) > 0 ? {
+    for pair in distinct(flatten([
+      for bastion_name, bastion_config in local.bastion_configs_enabled : [
+        for rule in local.lambda_to_ecs_rules : {
+          key          = "${bastion_name}-to-${rule.service_name}-port-${rule.port}"
+          bastion_name = bastion_name
+          service_name = rule.service_name
+          port         = rule.port
+        }
+      ]
+    ])) : pair.key => pair
+  } : {}
+
+  type                     = "ingress"
+  from_port                = each.value.port
+  to_port                  = each.value.port
+  protocol                 = "tcp"
+  security_group_id        = module.services[each.value.service_name].security_group_id
+  source_security_group_id = aws_security_group.bastion[each.value.bastion_name].id
+  description              = "Port ${each.value.port} from bastion ${each.value.bastion_name}"
+}
+
 # CloudWatch Log Group for RDS
 resource "aws_cloudwatch_log_group" "rds" {
   count = local.rds_enabled ? 1 : 0

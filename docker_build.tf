@@ -65,7 +65,10 @@ resource "null_resource" "docker_build" {
       
       # Get ECR login token
       echo "Logging into ECR..."
-      aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPOSITORY
+      aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPOSITORY || {
+        echo "ERROR: ECR login failed for service $SERVICE_NAME" >&2
+        exit 1
+      }
       
       # Build the image
       echo "Building Docker image..."
@@ -78,25 +81,34 @@ resource "null_resource" "docker_build" {
       
       echo "Using image tag: $IMAGE_TAG (from source hash)"
       
-      # Build command
-      DOCKER_BUILD_CMD="docker build"
-      DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD -f $DOCKERFILE_PATH"
-      DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD $BUILD_ARGS"
-      
+      # Build the image for AMD64 platform (Fargate requirement)
+      echo "Building Docker image with tag: $IMAGE_TAG for linux/amd64 platform"
       if [ -n "$TARGET" ]; then
-        DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD --target $TARGET"
+        docker build --platform linux/amd64 -f "$DOCKERFILE_PATH" $BUILD_ARGS --target "$TARGET" -t "$ECR_REPOSITORY:$IMAGE_TAG" "$BUILD_CONTEXT" || {
+          echo "ERROR: Docker build failed for service $SERVICE_NAME" >&2
+          exit 1
+        }
+      else
+        docker build --platform linux/amd64 -f "$DOCKERFILE_PATH" $BUILD_ARGS -t "$ECR_REPOSITORY:$IMAGE_TAG" "$BUILD_CONTEXT" || {
+          echo "ERROR: Docker build failed for service $SERVICE_NAME" >&2
+          exit 1
+        }
       fi
-      
-      DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD -t $ECR_REPOSITORY:$IMAGE_TAG"
-      DOCKER_BUILD_CMD="$DOCKER_BUILD_CMD $BUILD_CONTEXT"
-      
-      echo "Executing: $DOCKER_BUILD_CMD"
-      eval $DOCKER_BUILD_CMD
-      
+
       # Push the image
       echo "Pushing Docker image to ECR..."
-      docker push $ECR_REPOSITORY:$IMAGE_TAG
-      
+      docker push "$ECR_REPOSITORY:$IMAGE_TAG" || {
+        echo "ERROR: Docker push failed for service $SERVICE_NAME" >&2
+        exit 1
+      }
+
+      # Verify the image was pushed successfully
+      echo "Verifying image was pushed to ECR..."
+      aws ecr describe-images --repository-name $(basename $ECR_REPOSITORY) --region $AWS_REGION --image-ids imageTag=$IMAGE_TAG >/dev/null || {
+        echo "ERROR: Image verification failed - image $IMAGE_TAG not found in ECR for service $SERVICE_NAME" >&2
+        exit 1
+      }
+
       echo "Successfully built and pushed Docker image for service: $SERVICE_NAME"
       echo "Image tag: $IMAGE_TAG"
     EOT

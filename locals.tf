@@ -259,6 +259,9 @@ locals {
       timeout     = config.timeout != null ? config.timeout : var.lambda.timeout
       memory_size = config.memory_size != null ? config.memory_size : var.lambda.memory_size
 
+      reserved_concurrency = config.reserved_concurrency != null ? config.reserved_concurrency : var.lambda.reserved_concurrency
+      provisioned_concurrency = config.provisioned_concurrency != null ? config.provisioned_concurrency : var.lambda.provisioned_concurrency
+
       kms = config.kms != null ? config.kms : var.lambda.kms
 
       version_management = config.version_management != null ? config.version_management : var.lambda.version_management
