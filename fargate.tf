@@ -172,7 +172,7 @@ resource "aws_lb_listener" "https" {
   port              = "443"
   protocol          = "HTTPS"
   ssl_policy        = var.alb.ssl_policy
-  certificate_arn   = var.dns.domain != null ? aws_acm_certificate_validation.main[0].certificate_arn : null
+  certificate_arn   = var.dns.domain != null ? data.aws_acm_certificate.main[0].arn : null
 
   default_action {
     type = "fixed-response"

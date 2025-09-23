@@ -157,8 +157,8 @@ resource "aws_cloudfront_distribution" "main" {
   viewer_certificate {
     acm_certificate_arn = var.dns.domain != null ? (
       var.aws_region == "us-east-1" ?
-      aws_acm_certificate_validation.main[0].certificate_arn :
-      aws_acm_certificate_validation.cloudfront[0].certificate_arn
+      data.aws_acm_certificate.main[0].arn :
+      data.aws_acm_certificate.cloudfront[0].arn
     ) : null
     ssl_support_method             = var.dns.domain != null ? var.cloudfront.ssl_support_method : null
     minimum_protocol_version       = var.dns.domain != null ? var.cloudfront.minimum_protocol_version : null
@@ -275,7 +275,7 @@ resource "aws_cloudfront_distribution" "www_redirect" {
 
   # SSL Certificate
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.main[0].certificate_arn
+    acm_certificate_arn      = data.aws_acm_certificate.main[0].arn
     ssl_support_method       = var.cloudfront.ssl_support_method
     minimum_protocol_version = var.cloudfront.minimum_protocol_version
   }

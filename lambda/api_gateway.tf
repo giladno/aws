@@ -188,7 +188,8 @@ resource "aws_apigatewayv2_api_mapping" "lambda_mapping" {
 data "aws_acm_certificate" "main_domain" {
   count = var.function_config.triggers.http != null && var.function_config.triggers.http.enabled && var.config.dns_domain != null && var.config.cloudfront_enabled && var.function_config.triggers.http.path_pattern != null && !try(var.function_config.triggers.http.alb, false) ? 1 : 0
 
-  domain   = var.config.dns_domain  # Main domain cert
+  # Extract root domain from the DNS domain (e.g., app-dev.askteddi.com -> askteddi.com)
+  domain   = length(split(".", var.config.dns_domain)) >= 2 ? join(".", slice(split(".", var.config.dns_domain), length(split(".", var.config.dns_domain)) - 2, length(split(".", var.config.dns_domain)))) : var.config.dns_domain
   statuses = ["ISSUED"]
 }
 
@@ -196,7 +197,8 @@ data "aws_acm_certificate" "main_domain" {
 data "aws_acm_certificate" "main" {
   count = var.function_config.triggers.http != null && var.function_config.triggers.http.enabled && var.config.dns_domain != null && var.config.subdomain_routing_allowed && var.function_config.triggers.http.subdomain != null ? 1 : 0
 
-  domain   = "*.${var.config.dns_domain}"  # Wildcard cert for subdomains
+  # Extract root domain and look for its certificate (which includes wildcard as SAN)
+  domain   = length(split(".", var.config.dns_domain)) >= 2 ? join(".", slice(split(".", var.config.dns_domain), length(split(".", var.config.dns_domain)) - 2, length(split(".", var.config.dns_domain)))) : var.config.dns_domain
   statuses = ["ISSUED"]
 }
 

@@ -175,9 +175,22 @@ resource "aws_security_group_rule" "service_to_efs_egress" {
   description              = "EFS access for service ${each.key}"
 }
 
+# Check which secrets actually exist (for handling first deployment)
+data "aws_secretsmanager_secrets" "existing" {
+  filter {
+    name   = "name"
+    values = tolist(local.all_enhanced_secret_names)
+  }
+}
+
 # Data sources for enhanced secrets to get correct ARNs with AWS-generated suffixes
+# Only lookup secrets that actually exist
 data "aws_secretsmanager_secret" "enhanced_secrets" {
-  for_each = local.all_enhanced_secret_names
+  for_each = toset([
+    for secret_name in local.all_enhanced_secret_names :
+    secret_name
+    if contains([for s in data.aws_secretsmanager_secrets.existing.arns : element(split(":", s), 6)], secret_name)
+  ])
   name = each.value
 }
 

@@ -122,7 +122,7 @@ output "route53_zone_id" {
 }
 
 output "acm_certificate_arn" {
-  value       = var.dns.domain != null ? aws_acm_certificate.main[0].arn : null
+  value       = var.dns.domain != null ? data.aws_acm_certificate.main[0].arn : null
   description = "ACM certificate ARN"
 }
 
@@ -310,7 +310,7 @@ output "resource_arns" {
     ecs_cluster           = local.fargate_enabled ? aws_ecs_cluster.main.arn : null
     alb                   = local.alb_enabled ? aws_lb.main[0].arn : null
     cloudfront            = local.s3_enabled && var.s3.public != null ? aws_cloudfront_distribution.main[0].arn : null
-    acm_certificate       = var.dns.domain != null ? aws_acm_certificate.main[0].arn : null
+    acm_certificate       = var.dns.domain != null ? data.aws_acm_certificate.main[0].arn : null
     critical_alerts_topic = var.monitoring.enabled ? aws_sns_topic.critical_alerts[0].arn : null
     warning_alerts_topic  = var.monitoring.enabled ? aws_sns_topic.warning_alerts[0].arn : null
   }

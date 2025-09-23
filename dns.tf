@@ -18,104 +18,26 @@ data "aws_route53_zone" "main" {
   private_zone = false
 }
 
-# ACM Certificate for the domain and all subdomains (for ALB in current region)
-resource "aws_acm_certificate" "main" {
-  count             = var.dns.domain != null ? 1 : 0
-  domain_name       = var.dns.domain
-  validation_method = "DNS"
-
-  subject_alternative_names = [
-    "*.${var.dns.domain}"
-  ]
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = merge(local.common_tags, {
-    Name = var.dns.domain
-  })
+# Data source to look up existing ACM certificate for the domain (for ALB in current region)
+# This looks for the root domain certificate which includes wildcard as SAN
+data "aws_acm_certificate" "main" {
+  count    = var.dns.domain != null ? 1 : 0
+  domain   = local.root_domain
+  statuses = ["ISSUED"]
+  most_recent = true
 }
 
-# ACM Certificate for CloudFront (must be in us-east-1)
-# Only create if we need CloudFront AND current region is not already us-east-1
-resource "aws_acm_certificate" "cloudfront" {
-  provider          = aws.us_east_1
-  count             = var.dns.domain != null && local.s3_enabled && var.s3.public != null && var.aws_region != "us-east-1" ? 1 : 0
-  domain_name       = var.dns.domain
-  validation_method = "DNS"
-
-  subject_alternative_names = [
-    "*.${var.dns.domain}"
-  ]
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = merge(local.common_tags, {
-    Name = "${var.dns.domain}-cloudfront"
-  })
+# Data source to look up existing ACM certificate for CloudFront (must be in us-east-1)
+# Only needed if we need CloudFront AND current region is not already us-east-1
+data "aws_acm_certificate" "cloudfront" {
+  provider = aws.us_east_1
+  count    = var.dns.domain != null && local.s3_enabled && var.s3.public != null && var.aws_region != "us-east-1" ? 1 : 0
+  domain   = local.root_domain
+  statuses = ["ISSUED"]
+  most_recent = true
 }
 
-# Route53 records for certificate validation (ALB certificate)
-resource "aws_route53_record" "cert_validation" {
-  for_each = var.dns.domain != null ? {
-    for dvo in aws_acm_certificate.main[0].domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  } : {}
-
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main[0].zone_id
-}
-
-# Route53 records for certificate validation (CloudFront certificate)
-resource "aws_route53_record" "cert_validation_cloudfront" {
-  for_each = var.dns.domain != null && local.s3_enabled && var.s3.public != null && var.aws_region != "us-east-1" ? {
-    for dvo in aws_acm_certificate.cloudfront[0].domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  } : {}
-
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main[0].zone_id
-}
-
-# Certificate validation for ALB certificate
-resource "aws_acm_certificate_validation" "main" {
-  count                   = var.dns.domain != null ? 1 : 0
-  certificate_arn         = aws_acm_certificate.main[0].arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
-
-  timeouts {
-    create = "5m"
-  }
-}
-
-# Certificate validation for CloudFront certificate
-resource "aws_acm_certificate_validation" "cloudfront" {
-  provider                = aws.us_east_1
-  count                   = var.dns.domain != null && local.s3_enabled && var.s3.public != null && var.aws_region != "us-east-1" ? 1 : 0
-  certificate_arn         = aws_acm_certificate.cloudfront[0].arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation_cloudfront : record.fqdn]
-
-  timeouts {
-    create = "5m"
-  }
-}
+# Certificate validation resources removed - using existing certificates via data sources
 
 # Route53 A record for root domain (CloudFront - only if CloudFront is enabled)
 resource "aws_route53_record" "root" {

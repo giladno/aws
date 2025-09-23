@@ -415,9 +415,11 @@ locals {
       enhanced_secrets = merge(
         {
           for env_var_name, secret_ref in try(config.secrets, {}) :
-          env_var_name => length(split(":", secret_ref)) > 1 ? 
-            "${data.aws_secretsmanager_secret.enhanced_secrets[split(":", secret_ref)[0]].arn}:${join(":", slice(split(":", secret_ref), 1, length(split(":", secret_ref))))}::" :
-            data.aws_secretsmanager_secret.enhanced_secrets[secret_ref].arn
+          env_var_name => length(split(":", secret_ref)) > 1 ?
+            try("${data.aws_secretsmanager_secret.enhanced_secrets[split(":", secret_ref)[0]].arn}:${join(":", slice(split(":", secret_ref), 1, length(split(":", secret_ref))))}::",
+                "${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${split(":", secret_ref)[0]}:${join(":", slice(split(":", secret_ref), 1, length(split(":", secret_ref))))}::") :
+            try(data.aws_secretsmanager_secret.enhanced_secrets[secret_ref].arn,
+                "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${secret_ref}")
         },
         local.rds_enabled && config.environment.database != null ? {
           (
@@ -430,8 +432,10 @@ locals {
               startswith(config.environment.database.secret, "arn:aws:secretsmanager:") ? 
                 config.environment.database.secret :
                 length(split(":", config.environment.database.secret)) > 1 ?
-                  "${data.aws_secretsmanager_secret.enhanced_secrets[split(":", config.environment.database.secret)[0]].arn}:${join(":", slice(split(":", config.environment.database.secret), 1, length(split(":", config.environment.database.secret))))}::" :
-                  data.aws_secretsmanager_secret.enhanced_secrets[config.environment.database.secret].arn
+                  try("${data.aws_secretsmanager_secret.enhanced_secrets[split(":", config.environment.database.secret)[0]].arn}:${join(":", slice(split(":", config.environment.database.secret), 1, length(split(":", config.environment.database.secret))))}::",
+                      "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${split(":", config.environment.database.secret)[0]}:${join(":", slice(split(":", config.environment.database.secret), 1, length(split(":", config.environment.database.secret))))}::") :
+                  try(data.aws_secretsmanager_secret.enhanced_secrets[config.environment.database.secret].arn,
+                      "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${config.environment.database.secret}")
             ) : "${aws_secretsmanager_secret.database_url[0].arn}:DATABASE_URL_ACTIVE::"
           )
         } : {}
