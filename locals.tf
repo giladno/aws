@@ -417,7 +417,7 @@ locals {
           for env_var_name, secret_ref in try(config.secrets, {}) :
           env_var_name => length(split(":", secret_ref)) > 1 ?
             try("${data.aws_secretsmanager_secret.enhanced_secrets[split(":", secret_ref)[0]].arn}:${join(":", slice(split(":", secret_ref), 1, length(split(":", secret_ref))))}::",
-                "${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${split(":", secret_ref)[0]}:${join(":", slice(split(":", secret_ref), 1, length(split(":", secret_ref))))}::") :
+                "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${split(":", secret_ref)[0]}:${join(":", slice(split(":", secret_ref), 1, length(split(":", secret_ref))))}::") :
             try(data.aws_secretsmanager_secret.enhanced_secrets[secret_ref].arn,
                 "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${secret_ref}")
         },
