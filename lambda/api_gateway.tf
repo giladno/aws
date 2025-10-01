@@ -134,20 +134,8 @@ resource "aws_lambda_permission" "allow_api_gateway" {
   source_arn    = "${aws_apigatewayv2_api.lambda_api[0].execution_arn}/*"
 }
 
-# Custom domain for CloudFront integration (main domain, no Route53)
-resource "aws_apigatewayv2_domain_name" "lambda_domain_cloudfront" {
-  count = var.function_config.triggers.http != null && var.function_config.triggers.http.enabled && var.config.dns_domain != null && var.config.cloudfront_enabled && var.function_config.triggers.http.path_pattern != null && !try(var.function_config.triggers.http.alb, false) ? 1 : 0
-
-  domain_name = var.config.dns_domain
-
-  domain_name_configuration {
-    certificate_arn = data.aws_acm_certificate.main_domain[0].arn
-    endpoint_type   = "REGIONAL"
-    security_policy = "TLS_1_2"
-  }
-
-  tags = var.config.common_tags
-}
+# Note: The shared API Gateway domain is now created at the infrastructure level
+# and passed via var.config.api_gateway_domain_id
 
 # Custom domain for subdomain routing (with Route53)
 resource "aws_apigatewayv2_domain_name" "lambda_domain" {
@@ -166,10 +154,10 @@ resource "aws_apigatewayv2_domain_name" "lambda_domain" {
 
 # API Gateway domain mapping for CloudFront (main domain)
 resource "aws_apigatewayv2_api_mapping" "lambda_mapping_cloudfront" {
-  count = var.function_config.triggers.http != null && var.function_config.triggers.http.enabled && var.config.dns_domain != null && var.config.cloudfront_enabled && var.function_config.triggers.http.path_pattern != null && !try(var.function_config.triggers.http.alb, false) ? 1 : 0
+  count = var.function_config.triggers.http != null && var.function_config.triggers.http.enabled && var.config.api_gateway_domain_enabled && var.function_config.triggers.http.path_pattern != null && !try(var.function_config.triggers.http.alb, false) ? 1 : 0
 
   api_id          = aws_apigatewayv2_api.lambda_api[0].id
-  domain_name     = aws_apigatewayv2_domain_name.lambda_domain_cloudfront[0].id
+  domain_name     = var.config.api_gateway_domain_id
   stage           = aws_apigatewayv2_stage.lambda_stage[0].id
   api_mapping_key = trimprefix(var.function_config.triggers.http.path_pattern, "/")  # Use path pattern as mapping key
 }
@@ -184,14 +172,7 @@ resource "aws_apigatewayv2_api_mapping" "lambda_mapping" {
   api_mapping_key = null  # No path mapping needed - $default stage handles requests without stage prefix
 }
 
-# Data source for existing ACM certificate (main domain)
-data "aws_acm_certificate" "main_domain" {
-  count = var.function_config.triggers.http != null && var.function_config.triggers.http.enabled && var.config.dns_domain != null && var.config.cloudfront_enabled && var.function_config.triggers.http.path_pattern != null && !try(var.function_config.triggers.http.alb, false) ? 1 : 0
-
-  # Extract root domain from the DNS domain (e.g., app-dev.askteddi.com -> askteddi.com)
-  domain   = length(split(".", var.config.dns_domain)) >= 2 ? join(".", slice(split(".", var.config.dns_domain), length(split(".", var.config.dns_domain)) - 2, length(split(".", var.config.dns_domain)))) : var.config.dns_domain
-  statuses = ["ISSUED"]
-}
+# Note: ACM certificate is now handled at the infrastructure level for the shared domain
 
 # Data source for existing ACM certificate (subdomain wildcard)
 data "aws_acm_certificate" "main" {

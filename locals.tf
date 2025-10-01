@@ -530,6 +530,9 @@ locals {
     if config.triggers.http.path_pattern != null && !config.triggers.http.alb
   }
 
+  # Check if any Lambda function needs a shared API Gateway domain
+  needs_api_gateway_domain = local.s3_enabled && var.s3.public != null && var.dns.domain != null && length(local.lambda_with_cloudfront) > 0
+
   # Lambda functions with subdomain routing
   lambda_with_subdomain = {
     for name, config in local.lambda_with_http : name => config

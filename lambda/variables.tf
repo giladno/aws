@@ -121,6 +121,9 @@ variable "config" {
     # EFS configuration
     efs_enabled = optional(bool, false)
     efs_access_points = optional(map(string), {})  # mount_name -> access_point_arn
+    # Shared API Gateway domain (created at infrastructure level)
+    api_gateway_domain_id = optional(string, null)
+    api_gateway_domain_enabled = optional(bool, false)
     common_tags                   = map(string)
   })
 }

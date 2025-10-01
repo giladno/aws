@@ -77,6 +77,10 @@ module "lambda_functions" {
       for mount_name, access_point in aws_efs_access_point.mounts :
       mount_name => access_point.arn
     } : {}
+
+    # Shared API Gateway domain (if created)
+    api_gateway_domain_id = local.needs_api_gateway_domain ? aws_apigatewayv2_domain_name.shared_lambda_domain[0].id : null
+    api_gateway_domain_enabled = local.needs_api_gateway_domain
   }
 
   # Pass the IAM role ARN
