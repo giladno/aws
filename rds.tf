@@ -188,9 +188,9 @@ resource "aws_security_group_rule" "lambda_to_rds" {
   description              = "PostgreSQL from Lambda functions"
 }
 
-# Egress rule from Lambda to RDS
+# Egress rule from Lambda to RDS (only when proxy is NOT enabled)
 resource "aws_security_group_rule" "lambda_to_rds_egress" {
-  count = local.lambda_needs_database && local.rds_enabled ? 1 : 0
+  count = local.lambda_needs_database && local.rds_enabled && !var.rds.proxy ? 1 : 0
 
   type                     = "egress"
   from_port                = 5432
@@ -199,6 +199,19 @@ resource "aws_security_group_rule" "lambda_to_rds_egress" {
   source_security_group_id = aws_security_group.rds[0].id
   security_group_id        = aws_security_group.lambda_shared[0].id
   description              = "PostgreSQL to RDS from Lambda functions"
+}
+
+# Egress rule from Lambda to RDS Proxy (when proxy is enabled)
+resource "aws_security_group_rule" "lambda_to_rds_proxy_egress" {
+  count = local.lambda_needs_database && local.rds_enabled && var.rds.proxy ? 1 : 0
+
+  type                     = "egress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.rds_proxy[0].id
+  security_group_id        = aws_security_group.lambda_shared[0].id
+  description              = "PostgreSQL to RDS Proxy from Lambda functions"
 }
 
 # Egress rule from Lambda to VPC endpoints (HTTPS)
