@@ -782,10 +782,14 @@ resource "aws_iam_role_policy" "rds_proxy_secrets" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = [
-          # Use AWS-managed secret for RDS authentication
-          local.is_aurora ? aws_rds_cluster.main[0].master_user_secret[0].secret_arn : aws_db_instance.main[0].master_user_secret[0].secret_arn
-        ]
+        Resource = concat(
+          [
+            # Use AWS-managed secret for RDS authentication
+            local.is_aurora ? aws_rds_cluster.main[0].master_user_secret[0].secret_arn : aws_db_instance.main[0].master_user_secret[0].secret_arn
+          ],
+          # Additional proxy authentication secrets
+          var.rds.proxy_auth_secrets
+        )
       }
     ]
   })
@@ -862,12 +866,21 @@ resource "aws_db_proxy" "main" {
   engine_family       = "POSTGRESQL"
   debug_logging       = false
   idle_client_timeout = 1800
-  require_tls         = true
+  require_tls         = lookup(var.rds.parameter_groups.instance_parameters, "rds.force_ssl", "1") != "0"
 
   auth {
     auth_scheme = "SECRETS"
     # Use AWS-managed secret for RDS authentication
     secret_arn = local.is_aurora ? aws_rds_cluster.main[0].master_user_secret[0].secret_arn : aws_db_instance.main[0].master_user_secret[0].secret_arn
+  }
+
+  # Additional auth blocks for proxy authentication secrets
+  dynamic "auth" {
+    for_each = var.rds.proxy_auth_secrets
+    content {
+      auth_scheme = "SECRETS"
+      secret_arn  = auth.value
+    }
   }
 
   role_arn               = aws_iam_role.rds_proxy[0].arn

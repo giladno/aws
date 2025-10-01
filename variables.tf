@@ -446,6 +446,7 @@ variable "rds" {
 
     # Network and security
     proxy                       = optional(bool, false) # Enable RDS Proxy
+    proxy_auth_secrets          = optional(list(string), []) # Additional secrets for RDS Proxy authentication (ARNs)
     iam_database_authentication = optional(bool, true)  # Enable IAM database authentication (Aurora only)
     skip_final_snapshot         = optional(bool, true)  # Skip final snapshot on destroy
     deletion_protection         = optional(bool, true)  # Enable deletion protection
