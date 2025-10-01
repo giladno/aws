@@ -842,6 +842,19 @@ resource "aws_security_group_rule" "lambda_to_rds_proxy" {
   description              = "PostgreSQL from Lambda functions"
 }
 
+# Security group rule for RDS Proxy to access RDS database (ingress to RDS)
+resource "aws_security_group_rule" "rds_proxy_to_rds" {
+  count = local.rds_enabled && var.rds.proxy ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.rds_proxy[0].id
+  security_group_id        = aws_security_group.rds[0].id
+  description              = "PostgreSQL from RDS Proxy"
+}
+
 resource "aws_db_proxy" "main" {
   count = local.rds_enabled && var.rds.proxy ? 1 : 0
 
