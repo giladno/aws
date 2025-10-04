@@ -171,14 +171,17 @@ resource "null_resource" "nodejs_deps_build" {
       mkdir -p "${var.config.tmp_directory}/terraform-${var.config.name}-nodejs-layers/${var.function_name}"
       BUILD_DIR="${var.config.tmp_directory}/terraform-${var.config.name}-nodejs-layers/${var.function_name}"
 
+      # Convert to absolute path for Docker volume mount
+      BUILD_DIR_ABS=$(cd "$BUILD_DIR" && pwd)
+
       # Copy package files to build directory
-      cp "${var.function_config.source_dir}/package.json" "$BUILD_DIR/"
-      cp "${var.function_config.source_dir}/package-lock.json" "$BUILD_DIR/"
+      cp "${var.function_config.source_dir}/package.json" "$BUILD_DIR_ABS/"
+      cp "${var.function_config.source_dir}/package-lock.json" "$BUILD_DIR_ABS/"
 
       # Run Docker build with Lambda runtime environment
       echo "Building Node.js dependencies for ${local.effective_runtime}..."
       docker run --rm \
-        -v "$BUILD_DIR":/var/task \
+        -v "$BUILD_DIR_ABS":/var/task \
         -w /var/task \
         --platform linux/amd64 \
         --entrypoint=/bin/bash \
@@ -186,7 +189,7 @@ resource "null_resource" "nodejs_deps_build" {
         -c "npm ci --only=production --no-audit --no-fund && mkdir -p nodejs && cp -r node_modules nodejs/"
 
       # Create zip file with proper Lambda layer structure
-      cd "$BUILD_DIR"
+      cd "$BUILD_DIR_ABS"
       zip -r "${var.function_name}-deps.zip" nodejs/
 
       echo "Node.js dependencies built successfully for ${var.function_name}"
